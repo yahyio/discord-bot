@@ -10,6 +10,7 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "bot.db")
+GUILD_ID = int(os.getenv("GUILD_ID")) if os.getenv("GUILD_ID") else None
 
 COGS = ("cogs.levels", "cogs.moderation", "cogs.tickets", "cogs.giveaways", "cogs.help")
 
@@ -70,16 +71,30 @@ class EmberBot(commands.Bot):
         for cog in COGS:
             await self.load_extension(cog)
 
-        # Global komutları temizle (duplicate önleme)
-        self.tree.clear_commands(guild=None)
-        await self.tree.sync()
+        # GUILD_ID verildiyse komutları o sunucuya anında senkronla (instant).
+        # Verilmediyse hiçbir şey senkronlama — kullanıcı !sync ile yapar.
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
 
         @self.command(name="sync")
         @commands.is_owner()
         async def sync_cmd(ctx: commands.Context):
-            self.tree.copy_global_to(guild=ctx.guild)
-            synced = await self.tree.sync(guild=ctx.guild)
-            await ctx.send(f"✅ Synced {len(synced)} commands to **{ctx.guild.name}**.")
+            bot = ctx.bot
+            # 1) Discord'daki eski GLOBAL komutları temizle (duplicate kaynağı)
+            bot.tree.clear_commands(guild=None)
+            await bot.tree.sync()
+            # 2) Komutları local tree'ye geri yükle (cog'ları reload et)
+            for cog in COGS:
+                await bot.reload_extension(cog)
+            # 3) Bu sunucuya anında bas
+            bot.tree.copy_global_to(guild=ctx.guild)
+            synced = await bot.tree.sync(guild=ctx.guild)
+            await ctx.send(
+                f"✅ Synced {len(synced)} commands to **{ctx.guild.name}** "
+                f"(global komutlar temizlendi, duplicate yok)."
+            )
 
     async def close(self):
         if self.db:
