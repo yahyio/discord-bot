@@ -11,7 +11,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "bot.db")
 
-COGS = ("cogs.levels", "cogs.moderation", "cogs.tickets", "cogs.giveaways")
+COGS = ("cogs.levels", "cogs.moderation", "cogs.tickets", "cogs.giveaways", "cogs.help")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS xp (
@@ -70,7 +70,16 @@ class EmberBot(commands.Bot):
         for cog in COGS:
             await self.load_extension(cog)
 
+        # Global komutları temizle (duplicate önleme)
+        self.tree.clear_commands(guild=None)
         await self.tree.sync()
+
+        @self.command(name="sync")
+        @commands.is_owner()
+        async def sync_cmd(ctx: commands.Context):
+            self.tree.copy_global_to(guild=ctx.guild)
+            synced = await self.tree.sync(guild=ctx.guild)
+            await ctx.send(f"✅ Synced {len(synced)} commands to **{ctx.guild.name}**.")
 
     async def close(self):
         if self.db:
